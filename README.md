@@ -29,18 +29,18 @@ Web app for analyzing receptor-ligand interactions from PDB files, with optional
 
 ## Project layout
 
-- `/Users/dennis/projects/proteinanalyser/app.py`: Flask app and API routes
-- `/Users/dennis/projects/proteinanalyser/analyzer.py`: parsing, interaction detection, comparison
-- `/Users/dennis/projects/proteinanalyser/templates/index.html`: UI
-- `/Users/dennis/projects/proteinanalyser/static/app.js`: frontend logic
-- `/Users/dennis/projects/proteinanalyser/static/styles.css`: styling
+- `app.py`: Flask app and API routes
+- `analyzer.py`: parsing, interaction detection, comparison
+- `templates/index.html`: UI
+- `static/app.js`: frontend logic
+- `static/styles.css`: styling
 
 ## Installation
 
 ### Option A: Standard Python venv (heuristic engine)
 
 ```bash
-cd /Users/dennis/projects/proteinanalyser
+cd proteinanalyser
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
@@ -66,7 +66,7 @@ python -c "from app import app; app.run(host='0.0.0.0', port=5001, debug=True)"
 Use conda-forge binaries for `openbabel` + `plip` (more reliable than pip wheel builds on macOS):
 
 ```bash
-cd /Users/dennis/projects/proteinanalyser
+cd proteinanalyser
 conda create -n proteinchem -c conda-forge python=3.11 openbabel plip -y
 conda activate proteinchem
 pip install -r requirements.txt
@@ -82,7 +82,7 @@ The frontend already tries local NGL first (`/static/vendor/ngl.js`) before CDNs
 If you want to (re)install local NGL:
 
 ```bash
-cd /Users/dennis/projects/proteinanalyser
+cd proteinanalyser
 mkdir -p static/vendor
 curl -L "https://unpkg.com/ngl@2.1.0-dev.39/dist/ngl.js" -o static/vendor/ngl.js
 ```
@@ -218,4 +218,4 @@ Response includes:
 
 ## License
 
-See `/Users/dennis/projects/proteinanalyser/LICENSE`.
+See `LICENSE`.
