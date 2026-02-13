@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from analyzer import compare_interaction_patterns, detect_interactions
+from analyzer import compare_interaction_patterns, detect_interactions, inspect_pdb_entities
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB
@@ -37,6 +37,18 @@ def analyze():
 
         result = detect_interactions(pdb_text, ligand_resname, ligand_chain, engine=engine)
         result["pdb"] = pdb_text
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Unexpected error: {exc}"}), 500
+
+
+@app.post("/api/inspect")
+def inspect():
+    try:
+        pdb_text = _extract_text_file("complex")
+        result = inspect_pdb_entities(pdb_text)
         return jsonify(result)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

@@ -16,7 +16,7 @@
   <main>
     <section class="panel">
       <h2>Analysis Workflow</h2>
-      <p class="helper">Upload one PDB for single analysis, or upload both for comparison. For peptide/protein ligands, set chain and leave ligand name empty.</p>
+      <p class="helper">Use standard PDB files. Upload one for analysis, or two for comparison. Ligand can be selected from chain IDs or HETATM residues parsed from the file.</p>
 
       <form id="workflow-form">
         <label>
@@ -36,12 +36,20 @@
               <input id="complex-1-file" type="file" name="complex_1" accept=".pdb,.ent,.txt" required />
             </label>
             <label>
-              Ligand Name (optional)
-              <input type="text" name="ligand_resname_1" maxlength="4" />
+              Ligand Source
+              <select id="ligand-mode-1" name="ligand_mode_1">
+                <option value="auto" selected>Auto detect</option>
+                <option value="chain">Chain</option>
+                <option value="het">HETATM ligand</option>
+              </select>
             </label>
             <label>
-              Ligand Chain (optional)
-              <input type="text" name="ligand_chain_1" maxlength="2" />
+              Chain ligand
+              <select id="ligand-chain-select-1" name="ligand_chain_select_1" disabled></select>
+            </label>
+            <label>
+              HETATM ligand
+              <select id="ligand-het-select-1" name="ligand_het_select_1" disabled></select>
             </label>
           </fieldset>
 
@@ -52,12 +60,20 @@
               <input id="complex-2-file" type="file" name="complex_2" accept=".pdb,.ent,.txt" />
             </label>
             <label>
-              Ligand Name (optional)
-              <input type="text" name="ligand_resname_2" maxlength="4" />
+              Ligand Source
+              <select id="ligand-mode-2" name="ligand_mode_2">
+                <option value="auto" selected>Auto detect</option>
+                <option value="chain">Chain</option>
+                <option value="het">HETATM ligand</option>
+              </select>
             </label>
             <label>
-              Ligand Chain (optional)
-              <input type="text" name="ligand_chain_2" maxlength="2" />
+              Chain ligand
+              <select id="ligand-chain-select-2" name="ligand_chain_select_2" disabled></select>
+            </label>
+            <label>
+              HETATM ligand
+              <select id="ligand-het-select-2" name="ligand_het_select_2" disabled></select>
             </label>
           </fieldset>
         </div>

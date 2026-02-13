@@ -513,3 +513,55 @@ def detect_interactions(
         ligand_chain=ligand_chain,
         cutoff=cutoff,
     )
+
+
+def inspect_pdb_entities(pdb_text: str) -> dict:
+    structure = parse_structure(pdb_text)
+    model = next(structure.get_models(), None)
+    if model is None:
+        raise ValueError("No model found in PDB file.")
+
+    chains = []
+    het_ligands: dict[tuple[str, str], dict] = {}
+
+    for chain in model.get_chains():
+        protein_count = 0
+        ligand_count = 0
+        residue_total = 0
+        for residue in chain.get_residues():
+            if _is_water_residue(residue):
+                continue
+            residue_total += 1
+            if _is_protein_residue(residue):
+                protein_count += 1
+            elif _is_ligand_residue(residue):
+                ligand_count += 1
+                key = (chain.id, residue.resname.strip())
+                if key not in het_ligands:
+                    het_ligands[key] = {
+                        "chain": chain.id,
+                        "resname": residue.resname.strip(),
+                        "instances": 0,
+                    }
+                het_ligands[key]["instances"] += 1
+
+        if residue_total == 0:
+            continue
+
+        chain_role = "protein_like" if protein_count >= ligand_count else "ligand_like"
+        chains.append(
+            {
+                "chain": chain.id,
+                "residue_count": residue_total,
+                "protein_residues": protein_count,
+                "het_residues": ligand_count,
+                "role_hint": chain_role,
+            }
+        )
+
+    chains.sort(key=lambda c: c["chain"])
+    ligands = sorted(het_ligands.values(), key=lambda x: (x["chain"], x["resname"]))
+    return {
+        "chains": chains,
+        "het_ligands": ligands,
+    }

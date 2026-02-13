@@ -10,6 +10,7 @@ Flask web app to analyze receptor-ligand interactions from PDB files.
 - Auto-detect ligand residue if not provided.
 - Supports `auto / plip / heuristic` analysis engines.
 - Supports peptide ligands and protein-protein interfaces via chain-as-ligand mode.
+- Parses uploaded PDB files to offer ligand selection from chain IDs or HETATM ligands.
 
 ## Tech stack
 
@@ -67,6 +68,9 @@ If OpenBabel is missing, install OpenBabel for your OS first, then reinstall PLI
   - form-data: `complex` file, optional `ligand_resname`, optional `ligand_chain`, optional `engine`
 - `POST /api/compare`
   - form-data: `complex_1`, `complex_2`, optional ligand selectors for both complexes, optional `engine`
+- `POST /api/inspect`
+  - form-data: `complex` file
+  - returns parsed chain list and HETATM ligand candidates for UI selection
 
 ## Ligand selection modes
 
