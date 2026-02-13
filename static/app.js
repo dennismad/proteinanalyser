@@ -13,6 +13,7 @@ async function ensureNglLoaded() {
   if (typeof NGL !== "undefined") return true;
 
   const urls = [
+    "/static/vendor/ngl.js",
     "https://cdn.jsdelivr.net/npm/ngl@2.1.0-dev.39/dist/ngl.js",
     "https://unpkg.com/ngl@2.1.0-dev.39/dist/ngl.js",
     "https://cdnjs.cloudflare.com/ajax/libs/ngl/2.0.0-dev.37/ngl.js",
