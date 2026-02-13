@@ -218,13 +218,8 @@ function setSummaryText(text) {
   if (el) el.value = text || "";
 }
 
-const SHARE_PROMPT_HEADER = [
-  "Compare the protein–ligand interactions between the following complexes and present the result in the style of a scientific article.",
-  "Start with a short TL;DR written for non-experts.",
-  "Then provide an expert-level analysis using sections typical of a structural biology paper (e.g., Abstract-style overview, Interaction Statistics, Conserved Interactions, Structure-Specific Differences, Interpretation, Conclusion).",
-  "Maintain a neutral, technical tone. Focus on interpreting the biological meaning of shared vs unique interactions rather than listing raw data.",
-  "",
-].join("\n");
+const SHARE_PROMPT_HEADER =
+  "Compare the protein–ligand interactions between the following complexes and present the result in the style of a scientific article. Start with a short TL;DR written for non-experts. Then provide an expert-level analysis using sections typical of a structural biology paper (Abstract-style overview, Interaction Statistics, Conserved Interactions, Structure-Specific Differences, Interpretation, Conclusion). Maintain a neutral, technical tone. Focus on interpreting the biological meaning of shared vs unique interactions rather than listing raw data. Include biological context by identifying the proteins and ligands present in each PDB file. Outputs should summarize shared and unique interaction signatures and their implications for ligand recognition and specificity.\n";
 
 function summarizeSingleResult(fileNameValue, data) {
   const lines = [];
