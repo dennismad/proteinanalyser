@@ -289,6 +289,21 @@ tbody tr:nth-child(even) {
   background: #fff;
 }
 
+.compare-item {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0.15rem 0.25rem;
+}
+
+.compare-item:hover {
+  background: #eef6f1;
+}
+
+.compare-item.selected {
+  background: #dcefe3;
+  color: #173427;
+}
+
 #single-results,
 #compare-results {
   margin-top: 0.95rem;

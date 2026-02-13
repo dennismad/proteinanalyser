@@ -10,9 +10,7 @@ function loadScript(src) {
 }
 
 async function ensureNglLoaded() {
-  if (typeof NGL !== "undefined") {
-    return { ok: true, loadedFrom: "already-present", attempts: [] };
-  }
+  if (typeof NGL !== "undefined") return true;
 
   const urls = [
     "/static/vendor/ngl.js",
@@ -20,22 +18,16 @@ async function ensureNglLoaded() {
     "https://unpkg.com/ngl@2.1.0-dev.39/dist/ngl.js",
     "https://cdnjs.cloudflare.com/ajax/libs/ngl/2.0.0-dev.37/ngl.js",
   ];
-  const attempts = [];
-
   for (const url of urls) {
     try {
       await loadScript(url);
-      if (typeof NGL !== "undefined") {
-        attempts.push({ url, ok: true });
-        return { ok: true, loadedFrom: url, attempts };
-      }
-      attempts.push({ url, ok: false, error: "loaded script but NGL global missing" });
-    } catch (err) {
-      attempts.push({ url, ok: false, error: err.message || "unknown load error" });
+      if (typeof NGL !== "undefined") return true;
+    } catch (_err) {
+      // Try next source.
     }
   }
 
-  return { ok: false, loadedFrom: null, attempts };
+  return false;
 }
 
 function initStage(containerId) {
@@ -121,7 +113,10 @@ function atomSele(chain, resseq, atomName) {
 }
 
 function clearHighlights(state) {
-  if (!state.component) return;
+  if (!state.component) {
+    state.highlightReprs = [];
+    return;
+  }
   for (const repr of state.highlightReprs) {
     try {
       state.component.removeRepresentation(repr);
@@ -132,6 +127,7 @@ function clearHighlights(state) {
   state.highlightReprs = [];
 }
 
+// Highlights receptor/ligand residues (atom-level when available) for one interaction row.
 function highlightInteraction(state, interaction) {
   if (!state.component || !interaction) return;
   clearHighlights(state);
@@ -168,11 +164,19 @@ function highlightInteraction(state, interaction) {
   state.component.autoView(`${receptorResidueSele} or ${ligandResidueSele}`, 800);
 }
 
+function highlightExampleForCompare(state, interaction) {
+  if (!state || !state.component || !interaction) {
+    if (state) clearHighlights(state);
+    return;
+  }
+  highlightInteraction(state, interaction);
+}
+
 function formatSig(item) {
   return `${item.interaction_type} | ${item.receptor_chain}:${item.receptor_resname}${item.receptor_resseq}`;
 }
 
-function renderCompactList(id, items, emptyText) {
+function renderCompareList(id, items, emptyText, handlers, selectedKey) {
   const list = document.getElementById(id);
   list.innerHTML = "";
   if (items.length === 0) {
@@ -184,7 +188,16 @@ function renderCompactList(id, items, emptyText) {
 
   for (const item of items.slice(0, 300)) {
     const li = document.createElement("li");
+    li.className = "compare-item";
+    if (selectedKey && item.signature_key === selectedKey) {
+      li.classList.add("selected");
+    }
     li.textContent = formatSig(item);
+    if (handlers) {
+      li.addEventListener("mouseenter", () => handlers.onHover(item));
+      li.addEventListener("mouseleave", () => handlers.onLeave(item));
+      li.addEventListener("click", () => handlers.onClick(item));
+    }
     list.appendChild(li);
   }
 }
@@ -325,7 +338,7 @@ function applyLigandSelection(formData, idx, analyzeMode) {
 }
 
 async function main() {
-  const nglStatus = await ensureNglLoaded();
+  const nglOk = await ensureNglLoaded();
 
   const stage1 = initStage("viewer-1");
   const stage2 = initStage("viewer-2");
@@ -335,6 +348,16 @@ async function main() {
     highlightReprs: [],
     selectedIndex: null,
   };
+  const compareViewState1 = { component: null, highlightReprs: [] };
+  const compareViewState2 = { component: null, highlightReprs: [] };
+  const compareUiState = {
+    shared: [],
+    only1: [],
+    only2: [],
+    examples1: {},
+    examples2: {},
+    selectedKey: null,
+  };
 
   setSingleModeVisible();
   clearStage(stage2);
@@ -343,6 +366,8 @@ async function main() {
   const file2Input = document.getElementById("complex-2-file");
   const mode1 = document.getElementById("ligand-mode-1");
   const mode2 = document.getElementById("ligand-mode-2");
+  const trigger1 = document.querySelector('[data-file-target="complex-1-file"]');
+  const trigger2 = document.querySelector('[data-file-target="complex-2-file"]');
 
   mode1.addEventListener("change", () => updateSelectorEnablement(1));
   mode2.addEventListener("change", () => updateSelectorEnablement(2));
@@ -356,30 +381,16 @@ async function main() {
     });
   }
 
-  updateFileBadge("complex-1-file", "complex-1-name", document.querySelector('[data-file-target="complex-1-file"]'));
-  updateFileBadge("complex-2-file", "complex-2-name", document.querySelector('[data-file-target="complex-2-file"]'));
+  updateFileBadge("complex-1-file", "complex-1-name", trigger1);
+  updateFileBadge("complex-2-file", "complex-2-name", trigger2);
 
   setStatus("Ready. Upload Complex 1 to parse chains/ligands.");
-  const nglDiagEl = document.getElementById("ngl-diagnostics");
-  if (nglDiagEl) {
-    if (nglStatus.ok) {
-      nglDiagEl.textContent = `NGL source: ${nglStatus.loadedFrom}`;
-      nglDiagEl.className = "status ok";
-    } else {
-      const details = (nglStatus.attempts || [])
-        .map((x) => `${x.url} -> ${x.error || "failed"}`)
-        .join(" | ");
-      nglDiagEl.textContent = `NGL failed. Attempts: ${details}`;
-      nglDiagEl.className = "status error";
-    }
-  }
-
-  if (!nglStatus.ok) {
+  if (!nglOk) {
     setStatus("3D viewer failed to load, but analysis and ligand parsing still work.", true);
   }
 
   file1Input.addEventListener("change", async () => {
-    updateFileBadge("complex-1-file", "complex-1-name", document.querySelector('[data-file-target="complex-1-file"]'));
+    updateFileBadge("complex-1-file", "complex-1-name", trigger1);
     const f1 = fileName(file1Input);
     if (!f1) {
       setStatus("Select Complex 1 to begin.", true);
@@ -398,7 +409,7 @@ async function main() {
   });
 
   file2Input.addEventListener("change", async () => {
-    updateFileBadge("complex-2-file", "complex-2-name", document.querySelector('[data-file-target="complex-2-file"]'));
+    updateFileBadge("complex-2-file", "complex-2-name", trigger2);
     const f2 = fileName(file2Input);
     if (!f2) {
       setStatus("Complex 2 cleared. Single-analysis mode ready.");
@@ -454,20 +465,88 @@ async function main() {
         singleViewState.interactions = [];
         singleViewState.selectedIndex = null;
         clearHighlights(singleViewState);
+        clearHighlights(compareViewState1);
+        clearHighlights(compareViewState2);
         renderInteractionsTable([], {
           onHover: () => {},
           onLeave: () => {},
           onClick: () => {},
         }, null);
 
-        await Promise.all([
+        const loaded = await Promise.all([
           loadPdbIntoStage(stage1, data.pdb_1),
           loadPdbIntoStage(stage2, data.pdb_2),
         ]);
+        compareViewState1.component = loaded[0];
+        compareViewState2.component = loaded[1];
 
-        renderCompactList("shared-list", data.shared, "No shared interaction signatures.");
-        renderCompactList("only-1-list", data.only_in_complex_1, "No unique signatures.");
-        renderCompactList("only-2-list", data.only_in_complex_2, "No unique signatures.");
+        compareUiState.shared = data.shared || [];
+        compareUiState.only1 = data.only_in_complex_1 || [];
+        compareUiState.only2 = data.only_in_complex_2 || [];
+        compareUiState.examples1 = data.example_interactions_complex_1 || {};
+        compareUiState.examples2 = data.example_interactions_complex_2 || {};
+        compareUiState.selectedKey = null;
+
+        // Compare lists are signatures; each signature maps to one example interaction per complex for highlighting.
+        const renderCompareLists = () => {
+          const handlers = {
+            onHover: (item) => {
+              if (compareUiState.selectedKey) return;
+              const key = item.signature_key;
+              highlightExampleForCompare(compareViewState1, compareUiState.examples1[key]);
+              highlightExampleForCompare(compareViewState2, compareUiState.examples2[key]);
+            },
+            onLeave: () => {
+              if (compareUiState.selectedKey) {
+                const key = compareUiState.selectedKey;
+                highlightExampleForCompare(compareViewState1, compareUiState.examples1[key]);
+                highlightExampleForCompare(compareViewState2, compareUiState.examples2[key]);
+                return;
+              }
+              clearHighlights(compareViewState1);
+              clearHighlights(compareViewState2);
+            },
+            onClick: (item) => {
+              const key = item.signature_key;
+              if (compareUiState.selectedKey === key) {
+                compareUiState.selectedKey = null;
+                clearHighlights(compareViewState1);
+                clearHighlights(compareViewState2);
+                renderCompareLists();
+                setStatus("Comparison selection cleared.");
+                return;
+              }
+              compareUiState.selectedKey = key;
+              highlightExampleForCompare(compareViewState1, compareUiState.examples1[key]);
+              highlightExampleForCompare(compareViewState2, compareUiState.examples2[key]);
+              renderCompareLists();
+              setStatus("Comparison interaction selected. Click again to clear.");
+            },
+          };
+
+          renderCompareList(
+            "shared-list",
+            compareUiState.shared,
+            "No shared interaction signatures.",
+            handlers,
+            compareUiState.selectedKey
+          );
+          renderCompareList(
+            "only-1-list",
+            compareUiState.only1,
+            "No unique signatures.",
+            handlers,
+            compareUiState.selectedKey
+          );
+          renderCompareList(
+            "only-2-list",
+            compareUiState.only2,
+            "No unique signatures.",
+            handlers,
+            compareUiState.selectedKey
+          );
+        };
+        renderCompareLists();
 
         document.getElementById("workflow-summary").textContent =
           `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
@@ -495,6 +574,14 @@ async function main() {
         setSingleModeVisible();
         singleViewState.component = await loadPdbIntoStage(stage1, data.pdb);
         clearStage(stage2);
+        compareViewState1.component = null;
+        compareViewState2.component = null;
+        compareUiState.selectedKey = null;
+        clearHighlights(compareViewState1);
+        clearHighlights(compareViewState2);
+        renderCompareList("shared-list", [], "No shared interaction signatures.", null, null);
+        renderCompareList("only-1-list", [], "No unique signatures.", null, null);
+        renderCompareList("only-2-list", [], "No unique signatures.", null, null);
         clearHighlights(singleViewState);
         singleViewState.interactions = data.interactions.slice(0, 500);
         singleViewState.selectedIndex = null;

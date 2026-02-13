@@ -60,6 +60,10 @@ class Interaction:
             self.receptor_resname,
         )
 
+    def signature_key(self) -> str:
+        t, c, n, r = self.signature()
+        return f"{t}|{c}|{n}|{r}"
+
 
 def _to_int(value, default: int = -1) -> int:
     try:
@@ -434,9 +438,23 @@ def compare_interaction_patterns(
                 "receptor_chain": i[1],
                 "receptor_resseq": i[2],
                 "receptor_resname": i[3],
+                "signature_key": f"{i[0]}|{i[1]}|{i[2]}|{i[3]}",
             }
             for i in items
         ]
+
+    # Keep one representative full interaction per signature so the UI can highlight
+    # receptor/ligand atoms in each viewer while compare lists remain signature-level.
+    examples_1: dict[str, dict] = {}
+    examples_2: dict[str, dict] = {}
+    for interaction in interactions_1:
+        key = interaction.signature_key()
+        if key not in examples_1:
+            examples_1[key] = interaction.__dict__
+    for interaction in interactions_2:
+        key = interaction.signature_key()
+        if key not in examples_2:
+            examples_2[key] = interaction.__dict__
 
     return {
         "complex_1": {
@@ -454,6 +472,8 @@ def compare_interaction_patterns(
         "shared": _to_rows(shared),
         "only_in_complex_1": _to_rows(only_1),
         "only_in_complex_2": _to_rows(only_2),
+        "example_interactions_complex_1": examples_1,
+        "example_interactions_complex_2": examples_2,
     }
 
 
