@@ -1,10 +1,50 @@
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureNglLoaded() {
+  if (typeof NGL !== "undefined") return true;
+
+  const urls = [
+    "https://cdn.jsdelivr.net/npm/ngl@2.1.0-dev.39/dist/ngl.js",
+    "https://unpkg.com/ngl@2.1.0-dev.39/dist/ngl.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/ngl/2.0.0-dev.37/ngl.js",
+  ];
+
+  for (const url of urls) {
+    try {
+      await loadScript(url);
+      if (typeof NGL !== "undefined") return true;
+    } catch (_err) {
+      // Try next CDN.
+    }
+  }
+
+  return false;
+}
+
 function initStage(containerId) {
+  if (typeof NGL === "undefined") {
+    const el = document.getElementById(containerId);
+    if (el) {
+      el.innerHTML = "<div class='viewer-fallback'>3D viewer unavailable (NGL failed to load).</div>";
+    }
+    return null;
+  }
   const stage = new NGL.Stage(containerId, { backgroundColor: "#f6f7f5" });
   window.addEventListener("resize", () => stage.handleResize(), false);
   return stage;
 }
 
 function loadPdbIntoStage(stage, pdbText) {
+  if (!stage) return;
   stage.removeAllComponents();
   const blob = new Blob([pdbText], { type: "text/plain" });
   stage.loadFile(blob, { ext: "pdb" }).then((component) => {
@@ -15,6 +55,7 @@ function loadPdbIntoStage(stage, pdbText) {
 }
 
 function clearStage(stage) {
+  if (!stage) return;
   stage.removeAllComponents();
 }
 
@@ -121,6 +162,13 @@ function updateSelectorEnablement(idx) {
 
   chainSel.disabled = mode !== "chain" || chainSel.options.length === 0;
   hetSel.disabled = mode !== "het" || hetSel.options.length === 0;
+
+  if (mode === "chain" && chainSel.options.length === 0) {
+    setStatus(`Complex ${idx}: no chain options yet. Upload and parse the file first.`, true);
+  }
+  if (mode === "het" && hetSel.options.length === 0) {
+    setStatus(`Complex ${idx}: no HETATM ligand options yet. Upload and parse the file first.`, true);
+  }
 }
 
 async function inspectFile(file, idx) {
@@ -182,131 +230,148 @@ function applyLigandSelection(formData, idx, analyzeMode) {
   }
 }
 
-const stage1 = initStage("viewer-1");
-const stage2 = initStage("viewer-2");
+async function main() {
+  const nglOk = await ensureNglLoaded();
 
-setSingleModeVisible();
-clearStage(stage2);
+  const stage1 = initStage("viewer-1");
+  const stage2 = initStage("viewer-2");
 
-const file1Input = document.getElementById("complex-1-file");
-const file2Input = document.getElementById("complex-2-file");
-const mode1 = document.getElementById("ligand-mode-1");
-const mode2 = document.getElementById("ligand-mode-2");
+  setSingleModeVisible();
+  clearStage(stage2);
 
-mode1.addEventListener("change", () => updateSelectorEnablement(1));
-mode2.addEventListener("change", () => updateSelectorEnablement(2));
+  const file1Input = document.getElementById("complex-1-file");
+  const file2Input = document.getElementById("complex-2-file");
+  const mode1 = document.getElementById("ligand-mode-1");
+  const mode2 = document.getElementById("ligand-mode-2");
 
-file1Input.addEventListener("change", async () => {
-  const f1 = fileName(file1Input);
-  if (!f1) {
-    setStatus("Select Complex 1 to begin.", true);
-    return;
-  }
-  setStatus(`Parsing ${f1}...`);
-  try {
-    const info = await inspectFile(file1Input.files[0], 1);
-    setStatus(`Parsed ${f1}: ${info.chainCount} chains, ${info.hetCount} HETATM ligands detected.`);
-  } catch (err) {
-    setStatus(`Failed to parse ${f1}: ${err.message}`, true);
-  }
-});
+  mode1.addEventListener("change", () => updateSelectorEnablement(1));
+  mode2.addEventListener("change", () => updateSelectorEnablement(2));
 
-file2Input.addEventListener("change", async () => {
-  const f2 = fileName(file2Input);
-  if (!f2) {
-    setStatus("Complex 2 cleared. Single-analysis mode ready.");
-    return;
-  }
-  setStatus(`Parsing ${f2}...`);
-  try {
-    const info = await inspectFile(file2Input.files[0], 2);
-    setStatus(`Parsed ${f2}: ${info.chainCount} chains, ${info.hetCount} HETATM ligands detected. Comparison mode ready.`);
-  } catch (err) {
-    setStatus(`Failed to parse ${f2}: ${err.message}`, true);
-  }
-});
-
-document.getElementById("workflow-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  clearStatus();
-
-  const form = e.target;
-  const c1 = fileName(file1Input);
-  const c2 = fileName(file2Input);
-
-  if (!c1) {
-    setStatus("Complex 1 file is required.", true);
-    return;
+  setStatus("Ready. Upload Complex 1 to parse chains/ligands.");
+  if (!nglOk) {
+    setStatus("3D viewer failed to load from all CDNs, but analysis and ligand parsing still work.", true);
   }
 
-  const mode = c2 ? "compare" : "single";
-  setRunButtonBusy(true, mode);
-
-  try {
-    if (mode === "compare") {
-      setStatus(`Starting comparison: ${c1} vs ${c2}...`);
-
-      const formData = new FormData();
-      formData.append("complex_1", file1Input.files[0]);
-      formData.append("complex_2", file2Input.files[0]);
-      formData.append("engine", form.elements.engine.value || "auto");
-      applyLigandSelection(formData, 1, "compare");
-      applyLigandSelection(formData, 2, "compare");
-
-      const response = await fetch("/api/compare", { method: "POST", body: formData });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Comparison failed");
-      }
-
-      setCompareModeVisible();
-      loadPdbIntoStage(stage1, data.pdb_1);
-      loadPdbIntoStage(stage2, data.pdb_2);
-
-      renderCompactList("shared-list", data.shared, "No shared interaction signatures.");
-      renderCompactList("only-1-list", data.only_in_complex_1, "No unique signatures.");
-      renderCompactList("only-2-list", data.only_in_complex_2, "No unique signatures.");
-
-      document.getElementById("workflow-summary").textContent =
-        `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
-
-      const warnings = [...(data.complex_1.warnings || []), ...(data.complex_2.warnings || [])];
-      if (warnings.length > 0) {
-        setStatus(warnings.join(" "), true);
-      } else {
-        setStatus(`Comparison complete: ${c1} vs ${c2}.`);
-      }
-    } else {
-      setStatus(`Starting analysis of ${c1}...`);
-
-      const formData = new FormData();
-      formData.append("complex", file1Input.files[0]);
-      formData.append("engine", form.elements.engine.value || "auto");
-      applyLigandSelection(formData, 1, "single");
-
-      const response = await fetch("/api/analyze", { method: "POST", body: formData });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Analysis failed");
-      }
-
-      setSingleModeVisible();
-      loadPdbIntoStage(stage1, data.pdb);
-      clearStage(stage2);
-      renderInteractionsTable(data.interactions);
-
-      document.getElementById("workflow-summary").textContent =
-        `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;
-
-      if (data.warnings && data.warnings.length > 0) {
-        setStatus(data.warnings.join(" "), true);
-      } else {
-        setStatus(`Analysis complete: ${c1}.`);
-      }
+  file1Input.addEventListener("change", async () => {
+    const f1 = fileName(file1Input);
+    if (!f1) {
+      setStatus("Select Complex 1 to begin.", true);
+      return;
     }
-  } catch (err) {
-    setStatus(err.message, true);
-  } finally {
-    setRunButtonBusy(false, mode);
-  }
-});
+    setStatus(`Parsing ${f1}...`);
+    try {
+      const info = await inspectFile(file1Input.files[0], 1);
+      setStatus(`Parsed ${f1}: ${info.chainCount} chains, ${info.hetCount} HETATM ligands detected.`);
+      if (mode1.value === "chain" && info.chainCount === 0) {
+        setStatus(`Parsed ${f1}, but no chain ligands were detected.`, true);
+      }
+    } catch (err) {
+      setStatus(`Failed to parse ${f1}: ${err.message}`, true);
+    }
+  });
+
+  file2Input.addEventListener("change", async () => {
+    const f2 = fileName(file2Input);
+    if (!f2) {
+      setStatus("Complex 2 cleared. Single-analysis mode ready.");
+      return;
+    }
+    setStatus(`Parsing ${f2}...`);
+    try {
+      const info = await inspectFile(file2Input.files[0], 2);
+      setStatus(`Parsed ${f2}: ${info.chainCount} chains, ${info.hetCount} HETATM ligands detected. Comparison mode ready.`);
+      if (mode2.value === "chain" && info.chainCount === 0) {
+        setStatus(`Parsed ${f2}, but no chain ligands were detected.`, true);
+      }
+    } catch (err) {
+      setStatus(`Failed to parse ${f2}: ${err.message}`, true);
+    }
+  });
+
+  document.getElementById("workflow-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearStatus();
+
+    const form = e.target;
+    const c1 = fileName(file1Input);
+    const c2 = fileName(file2Input);
+
+    if (!c1) {
+      setStatus("Complex 1 file is required.", true);
+      return;
+    }
+
+    const mode = c2 ? "compare" : "single";
+    setRunButtonBusy(true, mode);
+
+    try {
+      if (mode === "compare") {
+        setStatus(`Starting comparison: ${c1} vs ${c2}...`);
+
+        const formData = new FormData();
+        formData.append("complex_1", file1Input.files[0]);
+        formData.append("complex_2", file2Input.files[0]);
+        formData.append("engine", form.elements.engine.value || "auto");
+        applyLigandSelection(formData, 1, "compare");
+        applyLigandSelection(formData, 2, "compare");
+
+        const response = await fetch("/api/compare", { method: "POST", body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Comparison failed");
+        }
+
+        setCompareModeVisible();
+        loadPdbIntoStage(stage1, data.pdb_1);
+        loadPdbIntoStage(stage2, data.pdb_2);
+
+        renderCompactList("shared-list", data.shared, "No shared interaction signatures.");
+        renderCompactList("only-1-list", data.only_in_complex_1, "No unique signatures.");
+        renderCompactList("only-2-list", data.only_in_complex_2, "No unique signatures.");
+
+        document.getElementById("workflow-summary").textContent =
+          `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
+
+        const warnings = [...(data.complex_1.warnings || []), ...(data.complex_2.warnings || [])];
+        if (warnings.length > 0) {
+          setStatus(warnings.join(" "), true);
+        } else {
+          setStatus(`Comparison complete: ${c1} vs ${c2}.`);
+        }
+      } else {
+        setStatus(`Starting analysis of ${c1}...`);
+
+        const formData = new FormData();
+        formData.append("complex", file1Input.files[0]);
+        formData.append("engine", form.elements.engine.value || "auto");
+        applyLigandSelection(formData, 1, "single");
+
+        const response = await fetch("/api/analyze", { method: "POST", body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Analysis failed");
+        }
+
+        setSingleModeVisible();
+        loadPdbIntoStage(stage1, data.pdb);
+        clearStage(stage2);
+        renderInteractionsTable(data.interactions);
+
+        document.getElementById("workflow-summary").textContent =
+          `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;
+
+        if (data.warnings && data.warnings.length > 0) {
+          setStatus(data.warnings.join(" "), true);
+        } else {
+          setStatus(`Analysis complete: ${c1}.`);
+        }
+      }
+    } catch (err) {
+      setStatus(err.message, true);
+    } finally {
+      setRunButtonBusy(false, mode);
+    }
+  });
+}
+
+main();

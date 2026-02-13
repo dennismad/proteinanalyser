@@ -109,6 +109,12 @@ button:hover {
   overflow: hidden;
 }
 
+.viewer-fallback {
+  padding: 1rem;
+  color: var(--error);
+  font-size: 0.92rem;
+}
+
 .viewer-small {
   height: 300px;
 }
