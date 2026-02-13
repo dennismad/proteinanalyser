@@ -14,14 +14,18 @@ function loadPdbIntoStage(stage, pdbText) {
   });
 }
 
-function setStatus(id, message, isError = false) {
-  const el = document.getElementById(id);
+function clearStage(stage) {
+  stage.removeAllComponents();
+}
+
+function setStatus(message, isError = false) {
+  const el = document.getElementById("workflow-status");
   el.textContent = message;
   el.className = `status ${isError ? "error" : "ok"}`;
 }
 
-function clearStatus(id) {
-  const el = document.getElementById(id);
+function clearStatus() {
+  const el = document.getElementById("workflow-status");
   el.textContent = "";
   el.className = "status";
 }
@@ -64,75 +68,136 @@ function renderCompactList(id, items, emptyText) {
   }
 }
 
-const singleStage = initStage("viewer-single");
-const compareStage1 = initStage("viewer-1");
-const compareStage2 = initStage("viewer-2");
-
-document.getElementById("analyze-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  clearStatus("analyze-status");
-
-  const form = e.target;
-  const formData = new FormData(form);
-
-  try {
-    setStatus("analyze-status", "Running analysis...");
-    const response = await fetch("/api/analyze", { method: "POST", body: formData });
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "Request failed");
-    }
-
-    loadPdbIntoStage(singleStage, data.pdb);
-    renderInteractionsTable(data.interactions);
-
-    document.getElementById("single-summary").textContent =
-      `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;
-
-    if (data.warnings && data.warnings.length > 0) {
-      setStatus("analyze-status", data.warnings.join(" "), true);
-    } else {
-      setStatus("analyze-status", "Analysis complete.");
-    }
-  } catch (err) {
-    setStatus("analyze-status", err.message, true);
+function setRunButtonBusy(isBusy, modeLabel) {
+  const button = document.getElementById("run-button");
+  if (isBusy) {
+    button.disabled = true;
+    button.textContent = modeLabel === "compare" ? "Comparing..." : "Analyzing...";
+  } else {
+    button.disabled = false;
+    button.textContent = "Run Analysis";
   }
-});
+}
 
-document.getElementById("compare-form").addEventListener("submit", async (e) => {
+function fileName(input) {
+  const f = input.files && input.files[0];
+  return f ? f.name : null;
+}
+
+function onFileSelectionChange() {
+  const c1 = document.getElementById("complex-1-file");
+  const c2 = document.getElementById("complex-2-file");
+  const f1 = fileName(c1);
+  const f2 = fileName(c2);
+
+  if (!f1) {
+    setStatus("Select Complex 1 to begin.", true);
+    return;
+  }
+
+  if (f2) {
+    setStatus(`Files selected: ${f1} and ${f2}. Ready to run comparison.`);
+  } else {
+    setStatus(`File selected: ${f1}. Ready to run single analysis.`);
+  }
+}
+
+function setSingleModeVisible() {
+  document.getElementById("single-results").style.display = "block";
+  document.getElementById("compare-results").style.display = "none";
+}
+
+function setCompareModeVisible() {
+  document.getElementById("single-results").style.display = "none";
+  document.getElementById("compare-results").style.display = "block";
+}
+
+const stage1 = initStage("viewer-1");
+const stage2 = initStage("viewer-2");
+
+setSingleModeVisible();
+clearStage(stage2);
+
+const file1Input = document.getElementById("complex-1-file");
+const file2Input = document.getElementById("complex-2-file");
+file1Input.addEventListener("change", onFileSelectionChange);
+file2Input.addEventListener("change", onFileSelectionChange);
+
+document.getElementById("workflow-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  clearStatus("compare-status");
+  clearStatus();
 
   const form = e.target;
-  const formData = new FormData(form);
+  const c1 = fileName(file1Input);
+  const c2 = fileName(file2Input);
+
+  if (!c1) {
+    setStatus("Complex 1 file is required.", true);
+    return;
+  }
+
+  const mode = c2 ? "compare" : "single";
+  setRunButtonBusy(true, mode);
 
   try {
-    setStatus("compare-status", "Running comparison...");
-    const response = await fetch("/api/compare", { method: "POST", body: formData });
-    const data = await response.json();
+    if (mode === "compare") {
+      setStatus(`Starting comparison: ${c1} vs ${c2}...`);
+      const formData = new FormData(form);
+      const response = await fetch("/api/compare", { method: "POST", body: formData });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Comparison failed");
+      }
 
-    if (!response.ok) {
-      throw new Error(data.error || "Request failed");
-    }
+      setCompareModeVisible();
+      loadPdbIntoStage(stage1, data.pdb_1);
+      loadPdbIntoStage(stage2, data.pdb_2);
 
-    loadPdbIntoStage(compareStage1, data.pdb_1);
-    loadPdbIntoStage(compareStage2, data.pdb_2);
+      renderCompactList("shared-list", data.shared, "No shared interaction signatures.");
+      renderCompactList("only-1-list", data.only_in_complex_1, "No unique signatures.");
+      renderCompactList("only-2-list", data.only_in_complex_2, "No unique signatures.");
 
-    renderCompactList("shared-list", data.shared, "No shared interaction signatures.");
-    renderCompactList("only-1-list", data.only_in_complex_1, "No unique signatures.");
-    renderCompactList("only-2-list", data.only_in_complex_2, "No unique signatures.");
+      document.getElementById("workflow-summary").textContent =
+        `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
 
-    document.getElementById("compare-summary").textContent =
-      `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
-
-    const warnings = [...(data.complex_1.warnings || []), ...(data.complex_2.warnings || [])];
-    if (warnings.length > 0) {
-      setStatus("compare-status", warnings.join(" "), true);
+      const warnings = [...(data.complex_1.warnings || []), ...(data.complex_2.warnings || [])];
+      if (warnings.length > 0) {
+        setStatus(warnings.join(" "), true);
+      } else {
+        setStatus(`Comparison complete: ${c1} vs ${c2}.`);
+      }
     } else {
-      setStatus("compare-status", "Comparison complete.");
+      setStatus(`Starting analysis of ${c1}...`);
+
+      const formData = new FormData();
+      formData.append("complex", file1Input.files[0]);
+      formData.append("ligand_resname", form.elements.ligand_resname_1.value || "");
+      formData.append("ligand_chain", form.elements.ligand_chain_1.value || "");
+      formData.append("engine", form.elements.engine.value || "auto");
+
+      const response = await fetch("/api/analyze", { method: "POST", body: formData });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Analysis failed");
+      }
+
+      setSingleModeVisible();
+      loadPdbIntoStage(stage1, data.pdb);
+      clearStage(stage2);
+      renderInteractionsTable(data.interactions);
+
+      document.getElementById("workflow-summary").textContent =
+        `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;
+
+      if (data.warnings && data.warnings.length > 0) {
+        setStatus(data.warnings.join(" "), true);
+      } else {
+        setStatus(`Analysis complete: ${c1}.`);
+      }
     }
   } catch (err) {
-    setStatus("compare-status", err.message, true);
+    setStatus(err.message, true);
+  } finally {
+    setRunButtonBusy(false, mode);
   }
 });

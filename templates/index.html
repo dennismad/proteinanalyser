@@ -10,57 +10,15 @@
 <body>
   <header>
     <h1>Protein Interaction Analyzer</h1>
-    <p>Analyze receptor-ligand contacts and compare two binding patterns.</p>
+    <p>Analyze receptor-ligand contacts and optionally compare two binding patterns in one workflow.</p>
   </header>
 
   <main>
     <section class="panel">
-      <h2>Single Complex Analysis</h2>
-      <form id="analyze-form">
-        <label>
-          PDB Complex File
-          <input type="file" name="complex" accept=".pdb,.ent,.txt" required />
-        </label>
-        <label>
-          Ligand Name (optional, e.g. ATP)
-          <input type="text" name="ligand_resname" maxlength="4" />
-        </label>
-        <label>
-          Ligand Chain (optional; for peptide/protein ligand, set chain and leave Ligand Name empty)
-          <input type="text" name="ligand_chain" maxlength="2" />
-        </label>
-        <label>
-          Analysis Engine
-          <select name="engine">
-            <option value="auto" selected>Auto (PLIP preferred)</option>
-            <option value="plip">PLIP (chemistry-aware)</option>
-            <option value="heuristic">Heuristic (fast fallback)</option>
-          </select>
-        </label>
-        <button type="submit">Analyze</button>
-      </form>
-      <div id="analyze-status" class="status"></div>
-      <div id="viewer-single" class="viewer"></div>
-      <div id="single-summary" class="summary"></div>
-      <div class="table-wrap">
-        <table id="single-table">
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Receptor Residue</th>
-              <th>Receptor Atom</th>
-              <th>Ligand Atom</th>
-              <th>Distance (A)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
+      <h2>Analysis Workflow</h2>
+      <p class="helper">Upload one PDB for single analysis, or upload both for comparison. For peptide/protein ligands, set chain and leave ligand name empty.</p>
 
-    <section class="panel">
-      <h2>Binding Pattern Comparison</h2>
-      <form id="compare-form">
+      <form id="workflow-form">
         <label>
           Analysis Engine
           <select name="engine">
@@ -69,60 +27,85 @@
             <option value="heuristic">Heuristic (fast fallback)</option>
           </select>
         </label>
+
         <div class="grid-two">
           <fieldset>
-            <legend>Complex 1</legend>
+            <legend>Complex 1 (required)</legend>
             <label>
               PDB File
-              <input type="file" name="complex_1" accept=".pdb,.ent,.txt" required />
+              <input id="complex-1-file" type="file" name="complex_1" accept=".pdb,.ent,.txt" required />
             </label>
             <label>
               Ligand Name (optional)
               <input type="text" name="ligand_resname_1" maxlength="4" />
             </label>
             <label>
-              Ligand Chain (optional; for peptide/protein ligand, set chain and leave Ligand Name empty)
+              Ligand Chain (optional)
               <input type="text" name="ligand_chain_1" maxlength="2" />
             </label>
           </fieldset>
+
           <fieldset>
-            <legend>Complex 2</legend>
+            <legend>Complex 2 (optional, enables compare)</legend>
             <label>
               PDB File
-              <input type="file" name="complex_2" accept=".pdb,.ent,.txt" required />
+              <input id="complex-2-file" type="file" name="complex_2" accept=".pdb,.ent,.txt" />
             </label>
             <label>
               Ligand Name (optional)
               <input type="text" name="ligand_resname_2" maxlength="4" />
             </label>
             <label>
-              Ligand Chain (optional; for peptide/protein ligand, set chain and leave Ligand Name empty)
+              Ligand Chain (optional)
               <input type="text" name="ligand_chain_2" maxlength="2" />
             </label>
           </fieldset>
         </div>
-        <button type="submit">Compare</button>
+
+        <button id="run-button" type="submit">Run Analysis</button>
       </form>
 
-      <div id="compare-status" class="status"></div>
-      <div class="grid-two">
-        <div id="viewer-1" class="viewer viewer-small"></div>
-        <div id="viewer-2" class="viewer viewer-small"></div>
-      </div>
-      <div id="compare-summary" class="summary"></div>
+      <div id="workflow-status" class="status"></div>
+      <div id="workflow-summary" class="summary"></div>
 
-      <div class="grid-three">
-        <div>
-          <h3>Shared</h3>
-          <ul id="shared-list" class="compact-list"></ul>
+      <div class="grid-two">
+        <div id="viewer-1" class="viewer"></div>
+        <div id="viewer-2" class="viewer"></div>
+      </div>
+
+      <div id="single-results">
+        <h3>Interactions (Single Complex)</h3>
+        <div class="table-wrap">
+          <table id="single-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Receptor Residue</th>
+                <th>Receptor Atom</th>
+                <th>Ligand Atom</th>
+                <th>Distance (A)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
-        <div>
-          <h3>Only in Complex 1</h3>
-          <ul id="only-1-list" class="compact-list"></ul>
-        </div>
-        <div>
-          <h3>Only in Complex 2</h3>
-          <ul id="only-2-list" class="compact-list"></ul>
+      </div>
+
+      <div id="compare-results">
+        <h3>Comparison</h3>
+        <div class="grid-three">
+          <div>
+            <h4>Shared</h4>
+            <ul id="shared-list" class="compact-list"></ul>
+          </div>
+          <div>
+            <h4>Only in Complex 1</h4>
+            <ul id="only-1-list" class="compact-list"></ul>
+          </div>
+          <div>
+            <h4>Only in Complex 2</h4>
+            <ul id="only-2-list" class="compact-list"></ul>
+          </div>
         </div>
       </div>
     </section>

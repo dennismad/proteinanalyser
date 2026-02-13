@@ -118,6 +118,12 @@ button:hover {
   font-size: 0.93rem;
 }
 
+.helper {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -152,6 +158,11 @@ th, td {
   max-height: 320px;
   overflow: auto;
   font-size: 0.9rem;
+}
+
+#single-results,
+#compare-results {
+  margin-top: 0.8rem;
 }
 
 @media (min-width: 960px) {
