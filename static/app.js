@@ -213,6 +213,91 @@ function setRunButtonBusy(isBusy, modeLabel) {
   }
 }
 
+function setSummaryText(text) {
+  const el = document.getElementById("summary-text");
+  if (el) el.value = text || "";
+}
+
+const SHARE_PROMPT_HEADER = [
+  "Compare the protein–ligand interactions between the following complexes and present the result in the style of a scientific article.",
+  "Start with a short TL;DR written for non-experts.",
+  "Then provide an expert-level analysis using sections typical of a structural biology paper (e.g., Abstract-style overview, Interaction Statistics, Conserved Interactions, Structure-Specific Differences, Interpretation, Conclusion).",
+  "Maintain a neutral, technical tone. Focus on interpreting the biological meaning of shared vs unique interactions rather than listing raw data.",
+  "",
+].join("\n");
+
+function summarizeSingleResult(fileNameValue, data) {
+  const lines = [];
+  lines.push(SHARE_PROMPT_HEADER);
+  lines.push("Protein Interaction Analysis (Single Complex)");
+  lines.push(`File: ${fileNameValue}`);
+  lines.push(`Ligand: ${data.ligand?.name || "unknown"} | Chain: ${data.ligand?.chain || "auto"} | Engine: ${data.engine_used}`);
+  lines.push(`Total interactions: ${data.interaction_count}`);
+  lines.push("");
+  lines.push("Interactions:");
+
+  const rows = data.interactions || [];
+  const limit = 1500;
+  const shown = rows.slice(0, limit);
+  shown.forEach((row, idx) => {
+    lines.push(
+      `${idx + 1}. ${row.interaction_type} | Receptor ${row.receptor_chain}:${row.receptor_resname}${row.receptor_resseq} (${row.receptor_atom}) <-> Ligand ${row.ligand_chain}:${row.ligand_resname}${row.ligand_resseq} (${row.ligand_atom}) | Distance ${row.distance} A`
+    );
+  });
+  if (rows.length > limit) {
+    lines.push(`... truncated: showing ${limit} of ${rows.length} interactions`);
+  }
+
+  if (data.warnings && data.warnings.length > 0) {
+    lines.push("");
+    lines.push(`Warnings: ${data.warnings.join(" ")}`);
+  }
+  return lines.join("\n");
+}
+
+function summarizeCompareResult(file1, file2, data) {
+  const lines = [];
+  lines.push(SHARE_PROMPT_HEADER);
+  lines.push("Protein Interaction Comparison");
+  lines.push(`Complex 1 file: ${file1}`);
+  lines.push(`Complex 2 file: ${file2}`);
+  lines.push(`Complex 1: interactions=${data.complex_1?.interaction_count || 0}, engine=${data.complex_1?.engine_used || "unknown"}, ligand=${data.complex_1?.ligand?.name || "unknown"} chain=${data.complex_1?.ligand?.chain || "auto"}`);
+  lines.push(`Complex 2: interactions=${data.complex_2?.interaction_count || 0}, engine=${data.complex_2?.engine_used || "unknown"}, ligand=${data.complex_2?.ligand?.name || "unknown"} chain=${data.complex_2?.ligand?.chain || "auto"}`);
+  lines.push(`Shared signatures: ${(data.shared || []).length}`);
+  lines.push(`Only in Complex 1: ${(data.only_in_complex_1 || []).length}`);
+  lines.push(`Only in Complex 2: ${(data.only_in_complex_2 || []).length}`);
+  lines.push("");
+
+  const addSection = (title, rows) => {
+    lines.push(title);
+    if (!rows || rows.length === 0) {
+      lines.push("- none");
+      lines.push("");
+      return;
+    }
+    const limit = 1000;
+    rows.slice(0, limit).forEach((item, idx) => {
+      lines.push(
+        `${idx + 1}. ${item.interaction_type} | ${item.receptor_chain}:${item.receptor_resname}${item.receptor_resseq}`
+      );
+    });
+    if (rows.length > limit) {
+      lines.push(`... truncated: showing ${limit} of ${rows.length}`);
+    }
+    lines.push("");
+  };
+
+  addSection("Shared interaction signatures:", data.shared || []);
+  addSection("Only in Complex 1:", data.only_in_complex_1 || []);
+  addSection("Only in Complex 2:", data.only_in_complex_2 || []);
+
+  const warnings = [...(data.complex_1?.warnings || []), ...(data.complex_2?.warnings || [])];
+  if (warnings.length > 0) {
+    lines.push(`Warnings: ${warnings.join(" ")}`);
+  }
+  return lines.join("\n");
+}
+
 function fileName(input) {
   const f = input.files && input.files[0];
   return f ? f.name : null;
@@ -366,6 +451,7 @@ async function main() {
   const file2Input = document.getElementById("complex-2-file");
   const mode1 = document.getElementById("ligand-mode-1");
   const mode2 = document.getElementById("ligand-mode-2");
+  const copyButton = document.getElementById("copy-summary-button");
   const trigger1 = document.querySelector('[data-file-target="complex-1-file"]');
   const trigger2 = document.querySelector('[data-file-target="complex-2-file"]');
 
@@ -383,10 +469,27 @@ async function main() {
 
   updateFileBadge("complex-1-file", "complex-1-name", trigger1);
   updateFileBadge("complex-2-file", "complex-2-name", trigger2);
+  setSummaryText("");
 
   setStatus("Ready. Upload Complex 1 to parse chains/ligands.");
   if (!nglOk) {
     setStatus("3D viewer failed to load, but analysis and ligand parsing still work.", true);
+  }
+
+  if (copyButton) {
+    copyButton.addEventListener("click", async () => {
+      const text = document.getElementById("summary-text")?.value || "";
+      if (!text.trim()) {
+        setStatus("No summary text available yet. Run an analysis first.", true);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus("Summary text copied to clipboard.");
+      } catch (_err) {
+        setStatus("Clipboard copy failed. You can still select and copy from the text box.", true);
+      }
+    });
   }
 
   file1Input.addEventListener("change", async () => {
@@ -552,6 +655,7 @@ async function main() {
           `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
 
         const warnings = [...(data.complex_1.warnings || []), ...(data.complex_2.warnings || [])];
+        setSummaryText(summarizeCompareResult(c1, c2, data));
         if (warnings.length > 0) {
           setStatus(warnings.join(" "), true);
         } else {
@@ -620,6 +724,7 @@ async function main() {
         document.getElementById("workflow-summary").textContent =
           `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;
 
+        setSummaryText(summarizeSingleResult(c1, data));
         if (data.warnings && data.warnings.length > 0) {
           setStatus(data.warnings.join(" "), true);
         } else {
