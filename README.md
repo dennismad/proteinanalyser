@@ -218,4 +218,4 @@ Response includes:
 
 ## License
 
-See `LICENSE`.
+MIT. See `LICENSE`.
