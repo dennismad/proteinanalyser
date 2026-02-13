@@ -32,7 +32,11 @@
             <legend>Complex 1 (required)</legend>
             <label>
               PDB File
-              <input id="complex-1-file" type="file" name="complex_1" accept=".pdb,.ent,.txt" required />
+              <div class="file-picker">
+                <input id="complex-1-file" class="file-input-hidden" type="file" name="complex_1" accept=".pdb,.ent,.txt" />
+                <button type="button" class="file-trigger" data-file-target="complex-1-file" data-file-label="complex-1-name">Choose file</button>
+                <span id="complex-1-name" class="file-name">No file selected</span>
+              </div>
             </label>
             <label>
               Ligand Source
@@ -56,7 +60,11 @@
             <legend>Complex 2 (optional, enables compare)</legend>
             <label>
               PDB File
-              <input id="complex-2-file" type="file" name="complex_2" accept=".pdb,.ent,.txt" />
+              <div class="file-picker">
+                <input id="complex-2-file" class="file-input-hidden" type="file" name="complex_2" accept=".pdb,.ent,.txt" />
+                <button type="button" class="file-trigger" data-file-target="complex-2-file" data-file-label="complex-2-name">Choose file</button>
+                <span id="complex-2-name" class="file-name">No file selected</span>
+              </div>
             </label>
             <label>
               Ligand Source
@@ -90,6 +98,7 @@
 
       <div id="single-results">
         <h3>Interactions (Single Complex)</h3>
+        <p class="helper">Hover a row to preview the contact in 3D. Click a row to lock selection; click it again to clear.</p>
         <div class="table-wrap">
           <table id="single-table">
             <thead>

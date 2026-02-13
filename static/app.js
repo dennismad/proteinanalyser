@@ -43,15 +43,15 @@ function initStage(containerId) {
   return stage;
 }
 
-function loadPdbIntoStage(stage, pdbText) {
-  if (!stage) return;
+async function loadPdbIntoStage(stage, pdbText) {
+  if (!stage) return null;
   stage.removeAllComponents();
   const blob = new Blob([pdbText], { type: "text/plain" });
-  stage.loadFile(blob, { ext: "pdb" }).then((component) => {
-    component.addRepresentation("cartoon", { color: "chainname" });
-    component.addRepresentation("ball+stick", { sele: "hetero and not water" });
-    component.autoView();
-  });
+  const component = await stage.loadFile(blob, { ext: "pdb" });
+  component.addRepresentation("cartoon", { color: "chainname" });
+  component.addRepresentation("ball+stick", { sele: "hetero and not water" });
+  component.autoView();
+  return component;
 }
 
 function clearStage(stage) {
@@ -71,12 +71,17 @@ function clearStatus() {
   el.className = "status";
 }
 
-function renderInteractionsTable(rows) {
+function renderInteractionsTable(rows, handlers, activeIndex) {
   const tbody = document.querySelector("#single-table tbody");
   tbody.innerHTML = "";
 
-  for (const row of rows.slice(0, 500)) {
+  for (const [idx, row] of rows.slice(0, 500).entries()) {
     const tr = document.createElement("tr");
+    tr.className = "interaction-row";
+    tr.dataset.idx = String(idx);
+    if (idx === activeIndex) {
+      tr.classList.add("selected");
+    }
     tr.innerHTML = `
       <td>${row.interaction_type}</td>
       <td>${row.receptor_chain}:${row.receptor_resname}${row.receptor_resseq}</td>
@@ -84,8 +89,48 @@ function renderInteractionsTable(rows) {
       <td>${row.ligand_atom}</td>
       <td>${row.distance.toFixed(3)}</td>
     `;
+    tr.addEventListener("mouseenter", () => handlers.onHover(idx));
+    tr.addEventListener("mouseleave", () => handlers.onLeave());
+    tr.addEventListener("click", () => handlers.onClick(idx));
     tbody.appendChild(tr);
   }
+}
+
+function residueSele(chain, resseq) {
+  return `:${chain} and ${resseq}`;
+}
+
+function clearHighlights(state) {
+  for (const repr of state.highlightReprs) {
+    try {
+      repr.dispose();
+    } catch (_e) {
+      // Ignore disposal errors for replaced components.
+    }
+  }
+  state.highlightReprs = [];
+}
+
+function highlightInteraction(state, interaction) {
+  if (!state.component || !interaction) return;
+  clearHighlights(state);
+
+  const receptorSele = residueSele(interaction.receptor_chain, interaction.receptor_resseq);
+  const ligandSele = residueSele(interaction.ligand_chain, interaction.ligand_resseq);
+
+  const receptorRepr = state.component.addRepresentation("ball+stick", {
+    sele: receptorSele,
+    color: "#f97316",
+    scale: 2.2,
+  });
+  const ligandRepr = state.component.addRepresentation("ball+stick", {
+    sele: ligandSele,
+    color: "#1f7a53",
+    scale: 2.2,
+  });
+  state.highlightReprs.push(receptorRepr, ligandRepr);
+
+  state.component.autoView(`${receptorSele} or ${ligandSele}`, 800);
 }
 
 function formatSig(item) {
@@ -123,6 +168,20 @@ function setRunButtonBusy(isBusy, modeLabel) {
 function fileName(input) {
   const f = input.files && input.files[0];
   return f ? f.name : null;
+}
+
+function updateFileBadge(inputId, labelId, triggerButton) {
+  const input = document.getElementById(inputId);
+  const label = document.getElementById(labelId);
+  if (!input || !label || !triggerButton) return;
+  const name = fileName(input);
+  if (name) {
+    label.textContent = name;
+    triggerButton.textContent = "Replace file";
+  } else {
+    label.textContent = "No file selected";
+    triggerButton.textContent = "Choose file";
+  }
 }
 
 function setSingleModeVisible() {
@@ -235,6 +294,12 @@ async function main() {
 
   const stage1 = initStage("viewer-1");
   const stage2 = initStage("viewer-2");
+  const singleViewState = {
+    component: null,
+    interactions: [],
+    highlightReprs: [],
+    selectedIndex: null,
+  };
 
   setSingleModeVisible();
   clearStage(stage2);
@@ -247,12 +312,25 @@ async function main() {
   mode1.addEventListener("change", () => updateSelectorEnablement(1));
   mode2.addEventListener("change", () => updateSelectorEnablement(2));
 
+  const fileTriggers = document.querySelectorAll(".file-trigger");
+  for (const trigger of fileTriggers) {
+    trigger.addEventListener("click", () => {
+      const target = trigger.dataset.fileTarget;
+      const input = document.getElementById(target);
+      if (input) input.click();
+    });
+  }
+
+  updateFileBadge("complex-1-file", "complex-1-name", document.querySelector('[data-file-target="complex-1-file"]'));
+  updateFileBadge("complex-2-file", "complex-2-name", document.querySelector('[data-file-target="complex-2-file"]'));
+
   setStatus("Ready. Upload Complex 1 to parse chains/ligands.");
   if (!nglOk) {
     setStatus("3D viewer failed to load from all CDNs, but analysis and ligand parsing still work.", true);
   }
 
   file1Input.addEventListener("change", async () => {
+    updateFileBadge("complex-1-file", "complex-1-name", document.querySelector('[data-file-target="complex-1-file"]'));
     const f1 = fileName(file1Input);
     if (!f1) {
       setStatus("Select Complex 1 to begin.", true);
@@ -271,6 +349,7 @@ async function main() {
   });
 
   file2Input.addEventListener("change", async () => {
+    updateFileBadge("complex-2-file", "complex-2-name", document.querySelector('[data-file-target="complex-2-file"]'));
     const f2 = fileName(file2Input);
     if (!f2) {
       setStatus("Complex 2 cleared. Single-analysis mode ready.");
@@ -322,8 +401,20 @@ async function main() {
         }
 
         setCompareModeVisible();
-        loadPdbIntoStage(stage1, data.pdb_1);
-        loadPdbIntoStage(stage2, data.pdb_2);
+        singleViewState.component = null;
+        singleViewState.interactions = [];
+        singleViewState.selectedIndex = null;
+        clearHighlights(singleViewState);
+        renderInteractionsTable([], {
+          onHover: () => {},
+          onLeave: () => {},
+          onClick: () => {},
+        }, null);
+
+        await Promise.all([
+          loadPdbIntoStage(stage1, data.pdb_1),
+          loadPdbIntoStage(stage2, data.pdb_2),
+        ]);
 
         renderCompactList("shared-list", data.shared, "No shared interaction signatures.");
         renderCompactList("only-1-list", data.only_in_complex_1, "No unique signatures.");
@@ -353,9 +444,42 @@ async function main() {
         }
 
         setSingleModeVisible();
-        loadPdbIntoStage(stage1, data.pdb);
+        singleViewState.component = await loadPdbIntoStage(stage1, data.pdb);
         clearStage(stage2);
-        renderInteractionsTable(data.interactions);
+        clearHighlights(singleViewState);
+        singleViewState.interactions = data.interactions.slice(0, 500);
+        singleViewState.selectedIndex = null;
+
+        const tableHandlers = {
+          onHover: (idx) => {
+            if (singleViewState.selectedIndex !== null) return;
+            highlightInteraction(singleViewState, singleViewState.interactions[idx]);
+          },
+          onLeave: () => {
+            if (singleViewState.selectedIndex !== null) {
+              highlightInteraction(
+                singleViewState,
+                singleViewState.interactions[singleViewState.selectedIndex]
+              );
+              return;
+            }
+            clearHighlights(singleViewState);
+          },
+          onClick: (idx) => {
+            if (singleViewState.selectedIndex === idx) {
+              singleViewState.selectedIndex = null;
+              clearHighlights(singleViewState);
+              renderInteractionsTable(singleViewState.interactions, tableHandlers, null);
+              setStatus("Selection cleared.");
+              return;
+            }
+            singleViewState.selectedIndex = idx;
+            highlightInteraction(singleViewState, singleViewState.interactions[idx]);
+            renderInteractionsTable(singleViewState.interactions, tableHandlers, idx);
+            setStatus(`Selected interaction ${idx + 1}. Click again to clear.`);
+          },
+        };
+        renderInteractionsTable(singleViewState.interactions, tableHandlers, null);
 
         document.getElementById("workflow-summary").textContent =
           `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;

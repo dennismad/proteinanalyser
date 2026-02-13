@@ -102,7 +102,6 @@ legend {
 }
 
 input[type="text"],
-input[type="file"],
 select,
 button {
   padding: 0.62rem 0.72rem;
@@ -110,6 +109,36 @@ button {
   border-radius: 10px;
   font: inherit;
   background: #fff;
+}
+
+input[type="file"].file-input-hidden {
+  display: none;
+}
+
+.file-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.file-trigger {
+  background: linear-gradient(135deg, var(--accent-2) 0%, #18709f 60%, #2382b4 100%);
+  box-shadow: 0 8px 18px rgba(15, 95, 138, 0.28);
+  padding: 0.55rem 0.8rem;
+}
+
+.file-name {
+  font-size: 0.88rem;
+  color: #335245;
+  background: #f3f8f5;
+  border: 1px solid #d7e5dc;
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 input:focus,
@@ -222,6 +251,19 @@ th {
 
 tbody tr:nth-child(even) {
   background: #fbfdfb;
+}
+
+.interaction-row {
+  cursor: pointer;
+}
+
+.interaction-row:hover {
+  background: #eef6f1 !important;
+}
+
+.interaction-row.selected {
+  background: #dcefe3 !important;
+  box-shadow: inset 3px 0 0 #1f7a53;
 }
 
 .grid-two {
