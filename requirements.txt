@@ -1,0 +1,4 @@
+Flask>=3.0.0,<4.0.0
+biopython>=1.84,<2.0.0
+# Optional for chemistry-aware detection (requires OpenBabel on system):
+# plip>=2.3.0

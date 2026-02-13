@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Protein Interaction Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/ngl@2.1.0-dev.39/dist/ngl.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Protein Interaction Analyzer</h1>
+    <p>Analyze receptor-ligand contacts and compare two binding patterns.</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Single Complex Analysis</h2>
+      <form id="analyze-form">
+        <label>
+          PDB Complex File
+          <input type="file" name="complex" accept=".pdb,.ent,.txt" required />
+        </label>
+        <label>
+          Ligand Name (optional, e.g. ATP)
+          <input type="text" name="ligand_resname" maxlength="4" />
+        </label>
+        <label>
+          Ligand Chain (optional; for peptide/protein ligand, set chain and leave Ligand Name empty)
+          <input type="text" name="ligand_chain" maxlength="2" />
+        </label>
+        <label>
+          Analysis Engine
+          <select name="engine">
+            <option value="auto" selected>Auto (PLIP preferred)</option>
+            <option value="plip">PLIP (chemistry-aware)</option>
+            <option value="heuristic">Heuristic (fast fallback)</option>
+          </select>
+        </label>
+        <button type="submit">Analyze</button>
+      </form>
+      <div id="analyze-status" class="status"></div>
+      <div id="viewer-single" class="viewer"></div>
+      <div id="single-summary" class="summary"></div>
+      <div class="table-wrap">
+        <table id="single-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Receptor Residue</th>
+              <th>Receptor Atom</th>
+              <th>Ligand Atom</th>
+              <th>Distance (A)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Binding Pattern Comparison</h2>
+      <form id="compare-form">
+        <label>
+          Analysis Engine
+          <select name="engine">
+            <option value="auto" selected>Auto (PLIP preferred)</option>
+            <option value="plip">PLIP (chemistry-aware)</option>
+            <option value="heuristic">Heuristic (fast fallback)</option>
+          </select>
+        </label>
+        <div class="grid-two">
+          <fieldset>
+            <legend>Complex 1</legend>
+            <label>
+              PDB File
+              <input type="file" name="complex_1" accept=".pdb,.ent,.txt" required />
+            </label>
+            <label>
+              Ligand Name (optional)
+              <input type="text" name="ligand_resname_1" maxlength="4" />
+            </label>
+            <label>
+              Ligand Chain (optional; for peptide/protein ligand, set chain and leave Ligand Name empty)
+              <input type="text" name="ligand_chain_1" maxlength="2" />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Complex 2</legend>
+            <label>
+              PDB File
+              <input type="file" name="complex_2" accept=".pdb,.ent,.txt" required />
+            </label>
+            <label>
+              Ligand Name (optional)
+              <input type="text" name="ligand_resname_2" maxlength="4" />
+            </label>
+            <label>
+              Ligand Chain (optional; for peptide/protein ligand, set chain and leave Ligand Name empty)
+              <input type="text" name="ligand_chain_2" maxlength="2" />
+            </label>
+          </fieldset>
+        </div>
+        <button type="submit">Compare</button>
+      </form>
+
+      <div id="compare-status" class="status"></div>
+      <div class="grid-two">
+        <div id="viewer-1" class="viewer viewer-small"></div>
+        <div id="viewer-2" class="viewer viewer-small"></div>
+      </div>
+      <div id="compare-summary" class="summary"></div>
+
+      <div class="grid-three">
+        <div>
+          <h3>Shared</h3>
+          <ul id="shared-list" class="compact-list"></ul>
+        </div>
+        <div>
+          <h3>Only in Complex 1</h3>
+          <ul id="only-1-list" class="compact-list"></ul>
+        </div>
+        <div>
+          <h3>Only in Complex 2</h3>
+          <ul id="only-2-list" class="compact-list"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
