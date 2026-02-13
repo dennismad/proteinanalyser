@@ -10,7 +10,9 @@ function loadScript(src) {
 }
 
 async function ensureNglLoaded() {
-  if (typeof NGL !== "undefined") return true;
+  if (typeof NGL !== "undefined") {
+    return { ok: true, loadedFrom: "already-present", attempts: [] };
+  }
 
   const urls = [
     "/static/vendor/ngl.js",
@@ -18,17 +20,22 @@ async function ensureNglLoaded() {
     "https://unpkg.com/ngl@2.1.0-dev.39/dist/ngl.js",
     "https://cdnjs.cloudflare.com/ajax/libs/ngl/2.0.0-dev.37/ngl.js",
   ];
+  const attempts = [];
 
   for (const url of urls) {
     try {
       await loadScript(url);
-      if (typeof NGL !== "undefined") return true;
-    } catch (_err) {
-      // Try next CDN.
+      if (typeof NGL !== "undefined") {
+        attempts.push({ url, ok: true });
+        return { ok: true, loadedFrom: url, attempts };
+      }
+      attempts.push({ url, ok: false, error: "loaded script but NGL global missing" });
+    } catch (err) {
+      attempts.push({ url, ok: false, error: err.message || "unknown load error" });
     }
   }
 
-  return false;
+  return { ok: false, loadedFrom: null, attempts };
 }
 
 function initStage(containerId) {
@@ -98,13 +105,26 @@ function renderInteractionsTable(rows, handlers, activeIndex) {
 }
 
 function residueSele(chain, resseq) {
-  return `:${chain} and ${resseq}`;
+  const c = (chain || "").trim();
+  const r = Number(resseq);
+  if (!Number.isFinite(r) || r <= 0) return null;
+  if (c) return `${r}:${c}`;
+  return `${r}`;
+}
+
+function atomSele(chain, resseq, atomName) {
+  const base = residueSele(chain, resseq);
+  const atom = (atomName || "").trim();
+  if (!base) return null;
+  if (!atom) return base;
+  return `${base}.${atom}`;
 }
 
 function clearHighlights(state) {
+  if (!state.component) return;
   for (const repr of state.highlightReprs) {
     try {
-      repr.dispose();
+      state.component.removeRepresentation(repr);
     } catch (_e) {
       // Ignore disposal errors for replaced components.
     }
@@ -116,22 +136,36 @@ function highlightInteraction(state, interaction) {
   if (!state.component || !interaction) return;
   clearHighlights(state);
 
-  const receptorSele = residueSele(interaction.receptor_chain, interaction.receptor_resseq);
-  const ligandSele = residueSele(interaction.ligand_chain, interaction.ligand_resseq);
+  const receptorResidueSele = residueSele(interaction.receptor_chain, interaction.receptor_resseq);
+  const ligandResidueSele = residueSele(interaction.ligand_chain, interaction.ligand_resseq);
+  const receptorAtomSele = atomSele(
+    interaction.receptor_chain,
+    interaction.receptor_resseq,
+    interaction.receptor_atom
+  );
+  const ligandAtomSele = atomSele(
+    interaction.ligand_chain,
+    interaction.ligand_resseq,
+    interaction.ligand_atom
+  );
+
+  if (!receptorResidueSele || !ligandResidueSele) {
+    return;
+  }
 
   const receptorRepr = state.component.addRepresentation("ball+stick", {
-    sele: receptorSele,
+    sele: receptorAtomSele || receptorResidueSele,
     color: "#f97316",
     scale: 2.2,
   });
   const ligandRepr = state.component.addRepresentation("ball+stick", {
-    sele: ligandSele,
+    sele: ligandAtomSele || ligandResidueSele,
     color: "#1f7a53",
     scale: 2.2,
   });
   state.highlightReprs.push(receptorRepr, ligandRepr);
 
-  state.component.autoView(`${receptorSele} or ${ligandSele}`, 800);
+  state.component.autoView(`${receptorResidueSele} or ${ligandResidueSele}`, 800);
 }
 
 function formatSig(item) {
@@ -291,7 +325,7 @@ function applyLigandSelection(formData, idx, analyzeMode) {
 }
 
 async function main() {
-  const nglOk = await ensureNglLoaded();
+  const nglStatus = await ensureNglLoaded();
 
   const stage1 = initStage("viewer-1");
   const stage2 = initStage("viewer-2");
@@ -326,8 +360,22 @@ async function main() {
   updateFileBadge("complex-2-file", "complex-2-name", document.querySelector('[data-file-target="complex-2-file"]'));
 
   setStatus("Ready. Upload Complex 1 to parse chains/ligands.");
-  if (!nglOk) {
-    setStatus("3D viewer failed to load from all CDNs, but analysis and ligand parsing still work.", true);
+  const nglDiagEl = document.getElementById("ngl-diagnostics");
+  if (nglDiagEl) {
+    if (nglStatus.ok) {
+      nglDiagEl.textContent = `NGL source: ${nglStatus.loadedFrom}`;
+      nglDiagEl.className = "status ok";
+    } else {
+      const details = (nglStatus.attempts || [])
+        .map((x) => `${x.url} -> ${x.error || "failed"}`)
+        .join(" | ");
+      nglDiagEl.textContent = `NGL failed. Attempts: ${details}`;
+      nglDiagEl.className = "status error";
+    }
+  }
+
+  if (!nglStatus.ok) {
+    setStatus("3D viewer failed to load, but analysis and ligand parsing still work.", true);
   }
 
   file1Input.addEventListener("change", async () => {
