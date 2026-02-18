@@ -201,6 +201,20 @@ button:disabled {
   padding: 0.6rem 0.7rem;
 }
 
+.view-link-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: #274536;
+  margin-bottom: 0.35rem;
+}
+
+.view-link-toggle input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+}
+
 .helper {
   margin-top: 0;
   color: var(--muted);

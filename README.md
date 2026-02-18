@@ -6,6 +6,7 @@ Web app for analyzing receptor-ligand interactions from PDB files, with optional
 
 - Analyze one complex (`Complex 1`) and produce an interaction list.
 - Compare two complexes (`Complex 1` + `Complex 2`) by interaction signatures.
+- Superpose Complex 2 onto Complex 1 in compare mode for same-frame 3D comparison.
 - Visualize structures in 3D with NGL.
 - Parse uploaded PDB files and offer ligand selectors from:
   - chain IDs (for peptide/protein ligands, including PPI-like use)
@@ -18,6 +19,7 @@ Web app for analyzing receptor-ligand interactions from PDB files, with optional
 - Interactive highlighting:
   - single-complex table rows: hover/click to highlight in 3D
   - compare lists: hover/click to highlight corresponding contacts in one/both viewers
+  - optional linked camera orientation between compare viewers
 
 ## Tech stack
 
@@ -109,11 +111,13 @@ Results:
 1. Upload `Complex 1` and `Complex 2` PDB files.
 2. Set ligand source for each complex.
 3. Click `Run Analysis` (comparison mode auto-detected).
+4. Keep `Align Complex 2 onto Complex 1` enabled for structural superposition.
 
 Results:
 - side-by-side 3D viewers
 - lists: `Shared`, `Only in Complex 1`, `Only in Complex 2`
 - hover/click list entries to highlight matching representative contacts
+- alignment status with chain pair, shared C-alpha count, and RMSD
 
 ## Ligand selection behavior
 
@@ -185,11 +189,13 @@ Form fields:
 - `ligand_resname_1` / `ligand_chain_1` (optional)
 - `ligand_resname_2` / `ligand_chain_2` (optional)
 - `engine` (optional: `auto|plip|heuristic`)
+- `align_structures` (optional: `true|false`, default `true`)
 
 Response includes:
 - `complex_1`, `complex_2` summaries
 - `shared[]`, `only_in_complex_1[]`, `only_in_complex_2[]`
 - `example_interactions_complex_1`, `example_interactions_complex_2` (used by compare highlighting)
+- `alignment` (superposition metadata: `aligned`, `reason`, and if aligned: `rmsd`, chain ids, shared CA count)
 - `pdb_1`, `pdb_2`
 
 ## File constraints and limits

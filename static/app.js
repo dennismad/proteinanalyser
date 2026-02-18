@@ -172,6 +172,21 @@ function highlightExampleForCompare(state, interaction) {
   highlightInteraction(state, interaction);
 }
 
+function syncStageOrientation(fromStage, toStage, syncState) {
+  if (!fromStage || !toStage || syncState.isApplying) return;
+  try {
+    syncState.isApplying = true;
+    const orientation = fromStage.viewerControls.getOrientation();
+    if (orientation) {
+      toStage.viewerControls.orient(orientation);
+    }
+  } catch (_err) {
+    // Keep orientation sync best-effort only.
+  } finally {
+    syncState.isApplying = false;
+  }
+}
+
 function formatSig(item) {
   return `${item.interaction_type} | ${item.receptor_chain}:${item.receptor_resname}${item.receptor_resseq}`;
 }
@@ -261,6 +276,13 @@ function summarizeCompareResult(file1, file2, data) {
   lines.push(`Shared signatures: ${(data.shared || []).length}`);
   lines.push(`Only in Complex 1: ${(data.only_in_complex_1 || []).length}`);
   lines.push(`Only in Complex 2: ${(data.only_in_complex_2 || []).length}`);
+  if (data.alignment?.aligned) {
+    lines.push(
+      `Structural alignment: yes (reference chain ${data.alignment.reference_chain}, moving chain ${data.alignment.moving_chain}, shared CA ${data.alignment.shared_ca_atoms}, RMSD ${data.alignment.rmsd} A)`
+    );
+  } else if (data.alignment) {
+    lines.push(`Structural alignment: no (${data.alignment.reason || "not available"})`);
+  }
   lines.push("");
 
   const addSection = (title, rows) => {
@@ -446,12 +468,32 @@ async function main() {
   const file2Input = document.getElementById("complex-2-file");
   const mode1 = document.getElementById("ligand-mode-1");
   const mode2 = document.getElementById("ligand-mode-2");
+  const linkViewsToggle = document.getElementById("link-views-toggle");
+  const alignStructuresToggle = document.getElementById("align-structures-toggle");
   const copyButton = document.getElementById("copy-summary-button");
   const trigger1 = document.querySelector('[data-file-target="complex-1-file"]');
   const trigger2 = document.querySelector('[data-file-target="complex-2-file"]');
+  const orientationSyncState = { isApplying: false };
 
   mode1.addEventListener("change", () => updateSelectorEnablement(1));
   mode2.addEventListener("change", () => updateSelectorEnablement(2));
+
+  if (stage1 && stage2 && linkViewsToggle) {
+    stage1.viewerControls.signals.changed.add(() => {
+      if (!linkViewsToggle.checked) return;
+      syncStageOrientation(stage1, stage2, orientationSyncState);
+    });
+    stage2.viewerControls.signals.changed.add(() => {
+      if (!linkViewsToggle.checked) return;
+      syncStageOrientation(stage2, stage1, orientationSyncState);
+    });
+    linkViewsToggle.addEventListener("change", () => {
+      if (linkViewsToggle.checked) {
+        syncStageOrientation(stage1, stage2, orientationSyncState);
+        setStatus("Compare panel orientations linked.");
+      }
+    });
+  }
 
   const fileTriggers = document.querySelectorAll(".file-trigger");
   for (const trigger of fileTriggers) {
@@ -549,6 +591,10 @@ async function main() {
         formData.append("complex_1", file1Input.files[0]);
         formData.append("complex_2", file2Input.files[0]);
         formData.append("engine", form.elements.engine.value || "auto");
+        formData.append(
+          "align_structures",
+          alignStructuresToggle && alignStructuresToggle.checked ? "true" : "false"
+        );
         applyLigandSelection(formData, 1, "compare");
         applyLigandSelection(formData, 2, "compare");
 
@@ -577,6 +623,9 @@ async function main() {
         ]);
         compareViewState1.component = loaded[0];
         compareViewState2.component = loaded[1];
+        if (linkViewsToggle && linkViewsToggle.checked) {
+          syncStageOrientation(stage1, stage2, orientationSyncState);
+        }
 
         compareUiState.shared = data.shared || [];
         compareUiState.only1 = data.only_in_complex_1 || [];
@@ -650,11 +699,15 @@ async function main() {
           `Complex 1 interactions: ${data.complex_1.interaction_count} (${data.complex_1.engine_used}) | Complex 2 interactions: ${data.complex_2.interaction_count} (${data.complex_2.engine_used}) | Shared signatures: ${data.shared.length}`;
 
         const warnings = [...(data.complex_1.warnings || []), ...(data.complex_2.warnings || [])];
+        const alignment = data.alignment || {};
+        const alignmentMsg = alignment.aligned
+          ? `Aligned on chains ${alignment.reference_chain}/${alignment.moving_chain} (shared CA: ${alignment.shared_ca_atoms}, RMSD: ${alignment.rmsd} A).`
+          : `Alignment not applied: ${alignment.reason || "unknown reason"}`;
         setSummaryText(summarizeCompareResult(c1, c2, data));
         if (warnings.length > 0) {
-          setStatus(warnings.join(" "), true);
+          setStatus(`${alignmentMsg} ${warnings.join(" ")}`, true);
         } else {
-          setStatus(`Comparison complete: ${c1} vs ${c2}.`);
+          setStatus(`Comparison complete: ${c1} vs ${c2}. ${alignmentMsg}`);
         }
       } else {
         setStatus(`Starting analysis of ${c1}...`);

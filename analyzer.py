@@ -7,7 +7,7 @@ import os
 import tempfile
 from typing import Iterable
 
-from Bio.PDB import PDBParser
+from Bio.PDB import PDBIO, PDBParser, Superimposer
 
 
 PROTEIN_RESIDUES = {
@@ -112,6 +112,104 @@ def _residue_label(residue) -> str:
 def parse_structure(pdb_text: str):
     parser = PDBParser(QUIET=True)
     return parser.get_structure("complex", StringIO(pdb_text))
+
+
+def _serialize_structure_to_pdb(structure) -> str:
+    out = StringIO()
+    io = PDBIO()
+    io.set_structure(structure)
+    io.save(out)
+    return out.getvalue()
+
+
+def _protein_residue_count(chain) -> int:
+    return sum(1 for residue in chain.get_residues() if _is_protein_residue(residue))
+
+
+def _pick_alignment_chain(model, preferred_chain: str | None, exclude_chain: str | None) -> str | None:
+    if preferred_chain:
+        for chain in model.get_chains():
+            if chain.id == preferred_chain and _protein_residue_count(chain) > 0:
+                return chain.id
+
+    candidates: list[tuple[int, str]] = []
+    for chain in model.get_chains():
+        if exclude_chain and chain.id == exclude_chain:
+            continue
+        count = _protein_residue_count(chain)
+        if count > 0:
+            candidates.append((count, chain.id))
+
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
+def _collect_ca_atoms_by_residue(chain) -> dict[tuple[int, str, str], object]:
+    atoms: dict[tuple[int, str, str], object] = {}
+    for residue in chain.get_residues():
+        if not _is_protein_residue(residue):
+            continue
+        if "CA" not in residue:
+            continue
+        key = (residue.id[1], str(residue.id[2]).strip(), residue.resname.strip())
+        atoms[key] = residue["CA"]
+    return atoms
+
+
+def align_structure_for_compare(
+    pdb_text_reference: str,
+    pdb_text_moving: str,
+    ligand_chain_reference: str | None = None,
+    ligand_chain_moving: str | None = None,
+) -> dict:
+    structure_ref = parse_structure(pdb_text_reference)
+    structure_mov = parse_structure(pdb_text_moving)
+    model_ref = next(structure_ref.get_models(), None)
+    model_mov = next(structure_mov.get_models(), None)
+    if model_ref is None or model_mov is None:
+        return {"aligned_pdb_text": pdb_text_moving, "aligned": False, "reason": "Missing model in input."}
+
+    chain_ref_id = _pick_alignment_chain(model_ref, None, ligand_chain_reference)
+    chain_mov_id = _pick_alignment_chain(model_mov, None, ligand_chain_moving)
+    if not chain_ref_id or not chain_mov_id:
+        return {
+            "aligned_pdb_text": pdb_text_moving,
+            "aligned": False,
+            "reason": "No protein chains available for structural alignment.",
+        }
+
+    chain_ref = model_ref[chain_ref_id]
+    chain_mov = model_mov[chain_mov_id]
+    ca_ref = _collect_ca_atoms_by_residue(chain_ref)
+    ca_mov = _collect_ca_atoms_by_residue(chain_mov)
+
+    common_keys = sorted(set(ca_ref.keys()) & set(ca_mov.keys()))
+    if len(common_keys) < 3:
+        return {
+            "aligned_pdb_text": pdb_text_moving,
+            "aligned": False,
+            "reason": "Insufficient shared C-alpha residues for superposition.",
+            "reference_chain": chain_ref_id,
+            "moving_chain": chain_mov_id,
+            "shared_ca_atoms": len(common_keys),
+        }
+
+    fixed_atoms = [ca_ref[k] for k in common_keys]
+    moving_atoms = [ca_mov[k] for k in common_keys]
+    sup = Superimposer()
+    sup.set_atoms(fixed_atoms, moving_atoms)
+    sup.apply(structure_mov.get_atoms())
+
+    return {
+        "aligned_pdb_text": _serialize_structure_to_pdb(structure_mov),
+        "aligned": True,
+        "rmsd": round(float(sup.rms), 4),
+        "reference_chain": chain_ref_id,
+        "moving_chain": chain_mov_id,
+        "shared_ca_atoms": len(common_keys),
+    }
 
 
 def autodetect_ligand(structure) -> tuple[str, str]:
