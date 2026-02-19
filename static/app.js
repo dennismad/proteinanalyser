@@ -320,6 +320,10 @@ function fileName(input) {
   return f ? f.name : null;
 }
 
+function pdbCodeValue(input) {
+  return (input?.value || "").trim().toUpperCase();
+}
+
 function updateFileBadge(inputId, labelId, triggerButton) {
   const input = document.getElementById(inputId);
   const label = document.getElementById(labelId);
@@ -382,7 +386,16 @@ function updateSelectorEnablement(idx) {
 
 async function inspectFile(file, idx) {
   const formData = new FormData();
-  formData.append("complex", file);
+  if (file) {
+    formData.append("complex", file);
+  } else {
+    const pdbInput = document.getElementById(`pdb-id-${idx}`);
+    const pdbId = (pdbInput?.value || "").trim().toUpperCase();
+    if (!pdbId) {
+      throw new Error(`Complex ${idx}: provide a file or PDB code.`);
+    }
+    formData.append("pdb_id", pdbId);
+  }
 
   const response = await fetch("/api/inspect", { method: "POST", body: formData });
   const data = await response.json();
@@ -410,6 +423,7 @@ async function inspectFile(file, idx) {
   return {
     chainCount: chainOptions.length,
     hetCount: hetOptions.length,
+    source: data.source || "",
   };
 }
 
@@ -468,6 +482,10 @@ async function main() {
   const file2Input = document.getElementById("complex-2-file");
   const mode1 = document.getElementById("ligand-mode-1");
   const mode2 = document.getElementById("ligand-mode-2");
+  const pdbId1Input = document.getElementById("pdb-id-1");
+  const pdbId2Input = document.getElementById("pdb-id-2");
+  const fetchPdb1Button = document.getElementById("fetch-pdb-1");
+  const fetchPdb2Button = document.getElementById("fetch-pdb-2");
   const linkViewsToggle = document.getElementById("link-views-toggle");
   const alignStructuresToggle = document.getElementById("align-structures-toggle");
   const copyButton = document.getElementById("copy-summary-button");
@@ -529,6 +547,45 @@ async function main() {
     });
   }
 
+  async function fetchAndInspectByPdbCode(idx) {
+    const pdbInput = idx === 1 ? pdbId1Input : pdbId2Input;
+    const code = pdbCodeValue(pdbInput);
+    if (!code) {
+      setStatus(`Complex ${idx}: enter a 4-character PDB code first.`, true);
+      return;
+    }
+    setStatus(`Fetching and parsing PDB ${code} for Complex ${idx}...`);
+    try {
+      const info = await inspectFile(null, idx);
+      setStatus(
+        `Parsed ${code}: ${info.chainCount} chains, ${info.hetCount} HETATM ligands detected.`
+      );
+    } catch (err) {
+      setStatus(`Failed to fetch/parse ${code}: ${err.message}`, true);
+    }
+  }
+
+  if (fetchPdb1Button) {
+    fetchPdb1Button.addEventListener("click", async () => fetchAndInspectByPdbCode(1));
+  }
+  if (fetchPdb2Button) {
+    fetchPdb2Button.addEventListener("click", async () => fetchAndInspectByPdbCode(2));
+  }
+  if (pdbId1Input) {
+    pdbId1Input.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      await fetchAndInspectByPdbCode(1);
+    });
+  }
+  if (pdbId2Input) {
+    pdbId2Input.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      await fetchAndInspectByPdbCode(2);
+    });
+  }
+
   file1Input.addEventListener("change", async () => {
     updateFileBadge("complex-1-file", "complex-1-name", trigger1);
     const f1 = fileName(file1Input);
@@ -574,22 +631,28 @@ async function main() {
     const form = e.target;
     const c1 = fileName(file1Input);
     const c2 = fileName(file2Input);
+    const id1 = pdbCodeValue(pdbId1Input);
+    const id2 = pdbCodeValue(pdbId2Input);
 
-    if (!c1) {
-      setStatus("Complex 1 file is required.", true);
+    if (!c1 && !id1) {
+      setStatus("Complex 1 input is required (file or PDB code).", true);
       return;
     }
 
-    const mode = c2 ? "compare" : "single";
+    const mode = c2 || id2 ? "compare" : "single";
     setRunButtonBusy(true, mode);
 
     try {
       if (mode === "compare") {
-        setStatus(`Starting comparison: ${c1} vs ${c2}...`);
+        const label1 = c1 || `PDB:${id1}`;
+        const label2 = c2 || `PDB:${id2}`;
+        setStatus(`Starting comparison: ${label1} vs ${label2}...`);
 
         const formData = new FormData();
-        formData.append("complex_1", file1Input.files[0]);
-        formData.append("complex_2", file2Input.files[0]);
+        if (c1) formData.append("complex_1", file1Input.files[0]);
+        else formData.append("pdb_id_1", id1);
+        if (c2) formData.append("complex_2", file2Input.files[0]);
+        else formData.append("pdb_id_2", id2);
         formData.append("engine", form.elements.engine.value || "auto");
         formData.append(
           "align_structures",
@@ -703,17 +766,19 @@ async function main() {
         const alignmentMsg = alignment.aligned
           ? `Aligned on chains ${alignment.reference_chain}/${alignment.moving_chain} (shared CA: ${alignment.shared_ca_atoms}, RMSD: ${alignment.rmsd} A).`
           : `Alignment not applied: ${alignment.reason || "unknown reason"}`;
-        setSummaryText(summarizeCompareResult(c1, c2, data));
+        setSummaryText(summarizeCompareResult(label1, label2, data));
         if (warnings.length > 0) {
           setStatus(`${alignmentMsg} ${warnings.join(" ")}`, true);
         } else {
-          setStatus(`Comparison complete: ${c1} vs ${c2}. ${alignmentMsg}`);
+          setStatus(`Comparison complete: ${label1} vs ${label2}. ${alignmentMsg}`);
         }
       } else {
-        setStatus(`Starting analysis of ${c1}...`);
+        const label1 = c1 || `PDB:${id1}`;
+        setStatus(`Starting analysis of ${label1}...`);
 
         const formData = new FormData();
-        formData.append("complex", file1Input.files[0]);
+        if (c1) formData.append("complex", file1Input.files[0]);
+        else formData.append("pdb_id", id1);
         formData.append("engine", form.elements.engine.value || "auto");
         applyLigandSelection(formData, 1, "single");
 
@@ -772,11 +837,11 @@ async function main() {
         document.getElementById("workflow-summary").textContent =
           `Ligand: ${data.ligand.name} | Chain: ${data.ligand.chain || "auto"} | Interactions: ${data.interaction_count} | Engine: ${data.engine_used}`;
 
-        setSummaryText(summarizeSingleResult(c1, data));
+        setSummaryText(summarizeSingleResult(label1, data));
         if (data.warnings && data.warnings.length > 0) {
           setStatus(data.warnings.join(" "), true);
         } else {
-          setStatus(`Analysis complete: ${c1}.`);
+          setStatus(`Analysis complete: ${label1}.`);
         }
       }
     } catch (err) {

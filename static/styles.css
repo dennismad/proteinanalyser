@@ -141,6 +141,16 @@ input[type="file"].file-input-hidden {
   white-space: nowrap;
 }
 
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.inline-row input[type="text"] {
+  flex: 1;
+}
+
 input:focus,
 select:focus,
 button:focus {

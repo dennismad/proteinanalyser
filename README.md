@@ -6,6 +6,7 @@ Web app for analyzing receptor-ligand interactions from PDB files, with optional
 
 - Analyze one complex (`Complex 1`) and produce an interaction list.
 - Compare two complexes (`Complex 1` + `Complex 2`) by interaction signatures.
+- Download structures directly from the RCSB PDB using 4-character PDB codes.
 - Superpose Complex 2 onto Complex 1 in compare mode for same-frame 3D comparison.
 - Visualize structures in 3D with NGL.
 - Parse uploaded PDB files and offer ligand selectors from:
@@ -93,7 +94,9 @@ curl -L "https://unpkg.com/ngl@2.1.0-dev.39/dist/ngl.js" -o static/vendor/ngl.js
 
 ### 1. Single-complex analysis
 
-1. Upload `Complex 1` PDB.
+1. Provide `Complex 1` as either:
+   - uploaded PDB file, or
+   - 4-character PDB code (use `Fetch + Parse`).
 2. Choose ligand source:
    - `Auto detect`
    - `Chain` (for peptide/protein ligand)
@@ -108,7 +111,7 @@ Results:
 
 ### 2. Dual-complex comparison
 
-1. Upload `Complex 1` and `Complex 2` PDB files.
+1. Provide `Complex 1` and `Complex 2` as files and/or PDB codes.
 2. Set ligand source for each complex.
 3. Click `Run Analysis` (comparison mode auto-detected).
 4. Keep `Align Complex 2 onto Complex 1` enabled for structural superposition.
@@ -157,7 +160,10 @@ Chemistry-aware interaction extraction (when installed), including classes such 
 Parse uploaded PDB and return chain/HET ligand candidates.
 
 Form fields:
-- `complex` (required file)
+- `complex` (optional file)
+- `pdb_id` (optional 4-character PDB code)
+
+One of `complex` or `pdb_id` is required.
 
 Response (high level):
 - `chains[]`
@@ -167,10 +173,13 @@ Response (high level):
 Analyze one complex.
 
 Form fields:
-- `complex` (required file)
+- `complex` (optional file)
+- `pdb_id` (optional 4-character PDB code)
 - `ligand_resname` (optional)
 - `ligand_chain` (optional)
 - `engine` (optional: `auto|plip|heuristic`)
+
+One of `complex` or `pdb_id` is required.
 
 Response includes:
 - `ligand`
@@ -184,12 +193,16 @@ Response includes:
 Compare two complexes.
 
 Form fields:
-- `complex_1` (required file)
-- `complex_2` (required file)
+- `complex_1` (optional file)
+- `pdb_id_1` (optional 4-character PDB code)
+- `complex_2` (optional file)
+- `pdb_id_2` (optional 4-character PDB code)
 - `ligand_resname_1` / `ligand_chain_1` (optional)
 - `ligand_resname_2` / `ligand_chain_2` (optional)
 - `engine` (optional: `auto|plip|heuristic`)
 - `align_structures` (optional: `true|false`, default `true`)
+
+For each complex, provide either file or PDB code.
 
 Response includes:
 - `complex_1`, `complex_2` summaries

@@ -43,6 +43,13 @@
               </div>
             </label>
             <label>
+              Or PDB code (e.g. 1THR)
+              <div class="inline-row">
+                <input id="pdb-id-1" type="text" name="pdb_id_1" maxlength="4" placeholder="1THR" />
+                <button id="fetch-pdb-1" type="button">Fetch + Parse</button>
+              </div>
+            </label>
+            <label>
               Ligand Source
               <select id="ligand-mode-1" name="ligand_mode_1">
                 <option value="auto" selected>Auto detect</option>
@@ -68,6 +75,13 @@
                 <input id="complex-2-file" class="file-input-hidden" type="file" name="complex_2" accept=".pdb,.ent,.txt" />
                 <button type="button" class="file-trigger" data-file-target="complex-2-file" data-file-label="complex-2-name">Choose file</button>
                 <span id="complex-2-name" class="file-name">No file selected</span>
+              </div>
+            </label>
+            <label>
+              Or PDB code (e.g. 4LZT)
+              <div class="inline-row">
+                <input id="pdb-id-2" type="text" name="pdb_id_2" maxlength="4" placeholder="4LZT" />
+                <button id="fetch-pdb-2" type="button">Fetch + Parse</button>
               </div>
             </label>
             <label>
